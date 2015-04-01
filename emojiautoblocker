@@ -1,0 +1,142 @@
+#!/usr/bin/env ruby
+
+require 'twitter'
+require 'yaml'
+require 'fileutils'
+
+CONFIG_FILE	= File.join(File.dirname(__FILE__), 'conf.yaml')
+TIMESTAMP	= Time.now.strftime("%Y%m%d.%H%M%S")
+LOGDIR		= File.join(File.dirname(__FILE__), 'run', TIMESTAMP)
+
+# load our config file.
+def 📚(📘)
+	YAML.load_file(📘)
+end
+
+
+# create a new connection to twitter.
+def 💻(📖)
+	Twitter::REST::Client.new(credentials = 📖[:twitter]) 
+end
+
+# get a list of our currently blocked users.
+# theoretically, we can hit API limits with this, but w/e.
+# it's more efficient than issuing a block call for an existing block. 
+def 🚫(📖)
+	🐦 = 💻(📖)
+	📝🚫🐊 = Array.new
+
+	begin
+		🚫📥 = 🐦.blocked_ids
+		File.open(File.join(LOGDIR, 'block_ids.current'), 'w+') do |💾|
+			🚫📥.sort.each do |😭🐊|
+				💾.puts(😭🐊)
+				📝🚫🐊 << 😭🐊.to_s
+			end
+		end
+	rescue Twitter::Error::TooManyRequests => error
+		puts "😴😴😴😴😴 API limit reached, sleeping #{error.rate_limit.reset_in} seconds. 😴😴😴😴😴"
+		sleep error.rate_limit.reset_in + 1
+		retry
+	end
+
+	📝🚫🐊
+end
+
+
+# pull down follower lists
+def 🙇(📖)
+	🐦 = 💻(📖)
+	🐑🐑🐑 = {}
+
+	📖[:sourcelist].each do |🎩🐊|
+		puts "Getting 🐑🐑🐑 for 🎩🐊: #{🎩🐊}"
+
+		begin
+			File.open(File.join(LOGDIR, "followers.#{🎩🐊}"), 'w+') do |💾|
+				🙇🙇🙇 = 🐦.follower_ids(🎩🐊.to_i)
+				🙇🙇🙇.sort.each do |👶🐊|
+					🐑🐑🐑[👶🐊.to_s] = 🐑🐑🐑.has_key?(👶🐊.to_s) ? 🐑🐑🐑[👶🐊.to_s] + 1 : 1 
+					💾.puts(👶🐊)
+				end
+			end
+		rescue Twitter::Error::Unauthorized => error
+			puts "⚠️: 🐊 unauthorized: #{🐊}"
+		rescue Twitter::Error::TooManyRequests => error
+			puts "API limit reached, sleeping #{error.rate_limit.reset_in} seconds"
+			sleep error.rate_limit.reset_in + 1
+			retry
+		end
+	end
+
+	🐑🐑🐑
+end
+
+
+# look at our list of followers & determine which need to be blocked.
+def 📝🙇🐊(📖, 📝🚫🐊, 🐑🐑🐑)
+	🐦 = 💻(📖)
+	💩💩💩 = Array.new
+
+	🐑🐑🐑.each do | 🐊, 🙇 |
+		next if 🙇 < 2
+		next if 📖[:whitelist].include? 🐊.to_i
+		next if 📝🚫🐊.include? 🐊.to_s
+
+		💩💩💩 << 🐊
+	end
+
+	💩💩💩
+end
+
+def 😭👎💩🐊(📖, 💩💩💩)
+	🐦 = 💻(📖)
+
+	File.open(File.join(LOGDIR, 'block_ids.new'), 'w+') do |💾|
+		💩💩💩.sort.each do |🐊|
+			💾.puts(🐊)
+		end
+	end
+
+	begin
+		💩💩💩 do |🐊|
+			🐦.block(🐊.to_i)
+			puts "🚫🐊: #{🐊}"
+		end
+	rescue Twitter::Error::NotFound => error 
+		puts "⚠️: 🐊 not found: #{🐊}"
+	rescue Twitter::Error::Forbidden => error
+		puts "⚠️: 🐊 suspended: #{🐊}"
+	rescue Twitter::Error::TooManyRequests => error
+		puts "😴😴😴😴😴 API limit reached, sleeping #{error.rate_limit.reset_in} seconds. 😴😴😴😴😴"
+		sleep error.rate_limit.reset_in + 1
+		retry
+	end
+end
+
+# main logic
+def main
+	📖 = 📚(CONFIG_FILE)
+
+	# set up our session directory 
+	if Dir.exist?(LOGDIR)
+		puts "#{LOGDIR} already exists, exiting."
+		exit
+	else
+		Dir.mkdir(LOGDIR)
+	end
+
+	puts "📝🚫🐊."
+	📝🚫🐊 = 🚫(📖)
+
+	puts "🎩🐊 📝 👶🐊."
+	🐑🐑🐑 = 🙇(📖)
+
+	puts "📝 🐊."
+	💩💩💩 = 📝🙇🐊(📖, 📝🚫🐊, 🐑🐑🐑)
+
+	puts "🐦🚫 #{💩💩💩.size} 🐊."
+	😭👎💩🐊(💩💩💩)
+end
+
+main
